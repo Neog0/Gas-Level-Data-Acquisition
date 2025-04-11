@@ -1,0 +1,86 @@
+#define BLYNK_PRINT Serial
+
+/* Blynk Setup */
+#define BLYNK_TEMPLATE_ID "TMPL6Njd9nsbm"
+#define BLYNK_TEMPLATE_NAME "Gas Leak"
+#define BLYNK_AUTH_TOKEN "BlhcK2pVVWD10yM-Ff4ZQMKv9CD0OmGI"
+
+#include <SPI.h>
+#include <WiFi.h>
+#include <BlynkSimpleWifi.h>
+
+// Gas sensor setup
+int gasSensorPin = A0;  // Analog pin where the gas sensor is connected
+int gasThreshold = 400;  // Set the threshold for detecting gas leakage (adjust as needed)
+
+char ssid[] = "Fiber2.4";  // Your Wi-Fi SSID
+char pass[] = "312331jd"; // Your Wi-Fi password
+
+// Blynk Virtual Pins for gas sensor status
+#define V1 1  // Send gas sensor value to Gauge (V1)
+#define V2 2  // Send text to Value Display (V2)
+#define V3 3  // LED widget (V3)
+
+// Buzzer pin setup
+int buzzerPin = 8;  // Buzzer connected to digital pin 8
+
+void setup() {
+  // Start serial for debugging
+  Serial.begin(9600);
+  
+  // Connect to Wi-Fi
+  Serial.println("Connecting to Wi-Fi...");
+  Blynk.begin(BLYNK_AUTH_TOKEN, ssid, pass);
+
+  // Wait for the Blynk connection to be established
+  while (Blynk.connect() == false) {
+    delay(1000);  // Wait for Blynk to connect
+    Serial.print(".");
+  }
+
+  Serial.println("Connected to Wi-Fi and Blynk!");
+
+  // Sensor and Buzzer pin setup
+  pinMode(gasSensorPin, INPUT);
+  pinMode(buzzerPin, OUTPUT);  // Set the buzzer pin as an output
+}
+
+void loop() {
+  Blynk.run();  // Keep Blynk running
+  
+  // Read the gas sensor value
+  int gasValue = analogRead(gasSensorPin);
+  
+  // Send the gas value to Blynk's Gauge widget (V1)
+  Blynk.virtualWrite(V1, gasValue);
+
+  // Check if the gas value exceeds the threshold
+  if (gasValue > gasThreshold) {
+    // Send a "Gas Detected" message to the Value Display widget (V2)
+    Blynk.virtualWrite(V2, "Gas Leak Detected! Please check the area.");
+    
+    // Turn on the buzzer
+    digitalWrite(buzzerPin, HIGH);
+    
+    // Turn on the LED widget (V3) to indicate danger
+    Blynk.virtualWrite(V3, HIGH);
+    
+    // Debugging output in the serial monitor
+    Serial.println("Gas Leak Detected! Buzzer and LED ON.");
+  } else {
+    // Reset value display to an empty state if no leak is detected
+    Blynk.virtualWrite(V2, "No Gas Leak Detected");
+    
+    // Turn off the buzzer
+    digitalWrite(buzzerPin, LOW);
+    
+    // Turn off the LED widget (V3)
+    Blynk.virtualWrite(V3, LOW);
+    
+    // Debugging output in the serial monitor
+    Serial.println("No Gas Leak. Buzzer and LED OFF.");
+  }
+  
+  // Small delay before the next reading
+  delay(1000);
+}
