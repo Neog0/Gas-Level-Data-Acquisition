@@ -1,0 +1,96 @@
+#include <SPI.h>
+#include <WiFi.h>
+#include <ArduinoHttpClient.h>
+
+// MQ2 Sensor and Buzzer
+int gasPin = A0;
+int buzzerControl = 8;
+int threshold = 200;
+
+// WiFi credentials
+char ssid[] = "Redmi 10C";
+char pass[] = "qwer54321";
+
+// PHP Server details
+const char* server = "192.168.100.88"; // Your PC's local IP
+int port = 80;
+String phpEndpoint = "/gascode/gasSensor.php";
+
+// Clients
+WiFiClient wifiClient;
+HttpClient client(wifiClient, server, port);
+
+// Timer variables for non-blocking delay
+unsigned long lastSendTime = 0;
+const unsigned long sendInterval = 10000;
+
+// State tracking to avoid sending same detection multiple times
+bool gasPreviouslyDetected = false;
+
+void setup() {
+  Serial.begin(9600);
+  pinMode(gasPin, INPUT);
+  pinMode(buzzerControl, OUTPUT);
+
+  Serial.println("Connecting to Wi-Fi...");
+  WiFi.begin(ssid, pass);
+
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+
+  Serial.println("\nConnected to Wi-Fi!");
+  Serial.println("Warming up MQ2 sensor for 10 seconds...");
+  delay(10000);
+  Serial.println("Warm-up complete. Starting detection...");
+}
+
+void loop() {
+  int gasValue = analogRead(gasPin);
+  Serial.print("Gas Value: ");
+  Serial.println(gasValue);
+
+  if (gasValue > threshold) {
+    if (!gasPreviouslyDetected) {
+      Serial.println("🚨 Gas Detected!");
+      digitalWrite(buzzerControl, HIGH);
+      sendToDatabase(gasValue, "Gas%20Detected");
+      lastSendTime = millis();
+      gasPreviouslyDetected = true;
+    }
+    // Optional: re-send after interval if gas remains detected
+    else if (millis() - lastSendTime >= sendInterval) {
+      sendToDatabase(gasValue, "Gas%20Still%20Detected");
+      lastSendTime = millis();
+    }
+  } else {
+    if (gasPreviouslyDetected) {
+      Serial.println("✅ Gas Cleared");
+      digitalWrite(buzzerControl, LOW);
+      sendToDatabase(gasValue, "Safe");
+      gasPreviouslyDetected = false;
+    } else {
+      Serial.println("No Gas Detected");
+    }
+  }
+
+  delay(1000); // Small delay for stability
+}
+
+void sendToDatabase(int gasValue, String status) {
+  if (WiFi.status() == WL_CONNECTED) {
+    String url = phpEndpoint + "?gas_value=" + String(gasValue) + "&status=" + status;
+    client.get(url);
+
+    int statusCode = client.responseStatusCode();
+    String response = client.responseBody();
+
+    Serial.print("Status Code: ");
+    Serial.println(statusCode);
+    Serial.print("Response: ");
+    Serial.println(response);
+  } else {
+    Serial.println("❌ WiFi not connected");
+  }
+}
